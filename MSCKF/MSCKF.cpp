@@ -1,6 +1,6 @@
 #include "MSCKF.h"
 #include "RK.h"
-#include "MVG.h"
+#include <cassert>
 
 using namespace std;
 using namespace Eigen;
@@ -172,7 +172,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     // TODO: Modify m_PIC and m_PCC
 
     // 将删除过的 state 和 track 记录在这里
-    vector<pair<Matrix3d, Vector3d>> new_states;
+    vector<CameraState> new_states;
     unordered_map<size_t, vector<Vector2d>> new_tracks;
 
     // 将被删除的 track 记录在这里，它还要结合 m_state 进行 update
@@ -180,7 +180,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     if (m_states.size() == m_state_limit) {
         for (size_t i = 0; i < m_states.size(); ++i) {
             if (i % 3 != 1) {
-                new_states.emplace_back(m_states[i].first, m_states[i].second);
+                new_states.emplace_back(m_states[i]);
             }
         }
         for (auto& t : continued_tracks) { // 检查每个跟踪上的 track，从中去除相关联的特征组成独立的 track
@@ -230,30 +230,78 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     Vector3d imu_to_cam_shift_in_world = JPL_CT(m_q)*m_p_cam_in_imu;
     Vector3d p_cam_in_world = m_p + imu_to_cam_shift_in_world;
 
+    // 旧的方法，需要与新的比较一下是否相同
+    //// (15)
+    //// CHECK
+    //Matrix<double, 6, 15> Jc; 
+    //Jc.setZero();
+    //Jc.block<3, 3>(0, 0) = JPL_C(m_q_imu_to_cam);
+    //Jc.block<3, 3>(3, 0) = JPL_Cross(imu_to_cam_shift_in_world);
+    //Jc.block<3, 3>(3, 12).setIdentity();
+    //Matrix<double, 15, 6> JcT = Jc.transpose();
+
+    //MatrixXd PIC(15, m_PIC.cols() + 6);
+    //PIC.block(0, 0, 15, m_PIC.cols()) = m_PIC;
+    //PIC.block(0, m_PIC.cols(), 15, 6) = m_PII*JcT;
+
+    //MatrixXd PCC(m_PCC.rows() + 6, m_PCC.cols() + 6);
+    //PCC.block(0, 0, m_PCC.rows(), m_PCC.cols()) = m_PCC;
+    //PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()) = Jc*m_PIC;
+    //PCC.block(0, m_PCC.cols(), m_PCC.rows(), 6) = PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()).transpose();
+    //PCC.block(m_PCC.rows(), m_PCC.cols(), 6, 6) = Jc*m_PII*JcT;
+
+    //m_PIC.swap(PIC);
+    //m_PCC.swap(PCC);
+
+    //Matrix3d R_world_to_cam = JPL_C(q_world_to_cam);
+    //Vector3d T_world_to_cam = -R_world_to_cam*p_cam_in_world;
+
     // 增加新的状态
-    // (15)
-    // CHECK
-    Matrix<double, 6, 15> Jc; // (16) 中 J 矩阵左侧的 15 列作为 Jc 进行计算
-    Jc.setZero();
-    Jc.block<3, 3>(0, 0) = JPL_C(m_q_imu_to_cam);
-    Jc.block<3, 3>(3, 0) = JPL_Cross(imu_to_cam_shift_in_world);
-    Jc.block<3, 3>(3, 12).setIdentity();
-    Matrix<double, 15, 6> JcT = Jc.transpose();
+    CameraState state;
+    state.R = JPL_C(q_world_to_cam);
+    state.T = -state.R*p_cam_in_world;
+    // (16) 中 J 矩阵左侧的 15 列作为 Jc 进行计算
+    state.Jc.setZero();
+    state.Jc.block<3, 3>(0, 0) = JPL_C(m_q_imu_to_cam);
+    state.Jc.block<3, 3>(3, 0) = JPL_Cross(imu_to_cam_shift_in_world);
+    state.Jc.block<3, 3>(3, 12).setIdentity();
+    state.PIIxJcT = m_PII*state.Jc.transpose();
+    m_states.push_back(state);
+}
 
-    MatrixXd PIC(15, m_PIC.cols() + 6);
-    PIC.block(0, 0, 15, m_PIC.cols()) = m_PIC;
-    PIC.block(0, m_PIC.cols(), 15, 6) = m_PII*JcT;
+Vector3d MSCKF::LinearLSTriangulation(const vector<Vector2d> &xs, const vector<CameraState> &states) {
+    MatrixX3d A;
+    VectorXd b;
+    A.resize(xs.size() * 2, 3);
+    b.resize(xs.size() * 2);
+    size_t sstart = states.size() - xs.size();
+    for (size_t i = 0; i < xs.size(); ++i) {
+        const Vector2d & x = xs[i];
+        const Matrix3d & R = states[sstart + i].R;
+        const Vector3d & T = states[sstart + i].T;
+        A.row(i * 2) = R.row(0) - x(0)*R.row(2);
+        A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
+        b(i * 2) = x(0)*T(2) - T(0);
+        b(i * 2 + 1) = x(1)*T(2) - T(1);
+    }
 
-    MatrixXd PCC(m_PCC.rows() + 6, m_PCC.cols() + 6);
-    PCC.block(0, 0, m_PCC.rows(), m_PCC.cols()) = m_PCC;
-    PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()) = Jc*m_PIC;
-    PCC.block(0, m_PCC.cols(), m_PCC.rows(), 6) = PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()).transpose();
-    PCC.block(m_PCC.rows(), m_PCC.cols(), 6, 6) = Jc*m_PII*JcT;
+    return A.colPivHouseholderQr().solve(b);
+}
 
-    m_PIC.swap(PIC);
-    m_PCC.swap(PCC);
+Eigen::Vector3d MSCKF::LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<CameraState> &states) {
+    MatrixX3d A;
+    VectorXd b;
+    A.resize(xs.size() * 2, 3);
+    b.resize(xs.size() * 2);
+    for (size_t i = 0; i < xs.size(); ++i) {
+        const Vector2d & x = xs[i].first;
+        const Matrix3d & R = states[xs[i].second].R;
+        const Vector3d & T = states[xs[i].second].T;
+        A.row(i * 2) = R.row(0) - x(0)*R.row(2);
+        A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
+        b(i * 2) = x(0)*T(2) - T(0);
+        b(i * 2 + 1) = x(1)*T(2) - T(1);
+    }
 
-    Matrix3d R_world_to_cam = JPL_C(q_world_to_cam);
-    Vector3d T_world_to_cam = -R_world_to_cam*p_cam_in_world;
-    m_states.emplace_back(R_world_to_cam, T_world_to_cam);
+    return A.colPivHouseholderQr().solve(b);
 }

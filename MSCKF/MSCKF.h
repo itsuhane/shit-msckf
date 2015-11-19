@@ -65,14 +65,29 @@ private:
     double m_g;                      // 重力加速度大小
 
     Eigen::Matrix15d m_PII;          // IMU状态的协方差
-    Eigen::MatrixXd  m_PIC;          // IMU和相机状态之间的协方差
-    Eigen::MatrixXd  m_PCC;          // 相机状态的协方差
+    //Eigen::MatrixXd  m_PIC;          // IMU和相机状态之间的协方差
+    //Eigen::MatrixXd  m_PCC;          // 相机状态的协方差
 
     bool m_has_old = false;
     double m_t_old;
     Eigen::Vector3d m_w_old;
     Eigen::Vector3d m_a_old;
 
-    std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> m_states; // 相机 state，我们使用 R 和 T 代表论文中的 q 和 p
+    struct CameraState { // 保存相机状态，伴随着保存 P_{IC} 和 P_{CC} 中需要的分量，参考 Readme
+        Eigen::Matrix3d R;
+        Eigen::Vector3d T;
+        Eigen::Matrix<double, 6, 15> Jc;
+        Eigen::Matrix<double, 15, 6> PIIxJcT;
+    };
+
+    std::vector<CameraState> m_states; // 相机 state，我们使用 R 和 T 代表论文中的 q 和 p
     std::unordered_map<size_t, std::vector<Eigen::Vector2d>> m_tracks; // 特征 tracks
+
+    // 使用 Linear LS 方法进行三角化，参考[5]
+    // xs 和 states 从后向前对应，xs 的长度不超过 states 的长度
+    Eigen::Vector3d LinearLSTriangulation(const std::vector<Eigen::Vector2d> &xs, const std::vector<CameraState> &states);
+
+    // 使用 Linear LS 方法进行三角化，参考[5]
+    // xs.second 代表 states 中的对应项
+    Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<CameraState> &states);
 };
