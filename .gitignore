@@ -1,0 +1,11 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/x64
+/MSCKF/x64
+/MSCKF_Simulation/x64
+*.suo
+*.sdf
+*.opensdf
+*.user

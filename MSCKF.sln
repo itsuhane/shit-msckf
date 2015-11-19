@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MSCKF", "MSCKF\MSCKF.vcxproj", "{06AC7A0F-93C3-4DCD-8137-455A2126D00B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{1E1F8157-E4F6-4C62-A059-22AF555FD283}"
+	ProjectSection(SolutionItems) = preProject
+		docs\[1] A Multi-State Constraint Kalman Filter for Vision-aided Inertial Navigation.pdf = docs\[1] A Multi-State Constraint Kalman Filter for Vision-aided Inertial Navigation.pdf
+		docs\[2] An Introduction to the Kalman Filter.pdf = docs\[2] An Introduction to the Kalman Filter.pdf
+		docs\[3] Indirect Kalman Filter for 3D Attitude Estimation - A Tutorial for Quaternion Algebra.pdf = docs\[3] Indirect Kalman Filter for 3D Attitude Estimation - A Tutorial for Quaternion Algebra.pdf
+		docs\[4] Inverse Depth Parametrization for Monocular SLAM.pdf = docs\[4] Inverse Depth Parametrization for Monocular SLAM.pdf
+		docs\[5] Triangulation.pdf = docs\[5] Triangulation.pdf
+		Readme.txt = Readme.txt
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MSCKF_Simulation", "MSCKF_Simulation\MSCKF_Simulation.vcxproj", "{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}"
+	ProjectSection(ProjectDependencies) = postProject
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B} = {06AC7A0F-93C3-4DCD-8137-455A2126D00B}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Debug|Win32.ActiveCfg = Debug|Win32
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Debug|Win32.Build.0 = Debug|Win32
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Debug|x64.ActiveCfg = Debug|x64
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Debug|x64.Build.0 = Debug|x64
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Release|Win32.ActiveCfg = Release|Win32
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Release|Win32.Build.0 = Release|Win32
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Release|x64.ActiveCfg = Release|x64
+		{06AC7A0F-93C3-4DCD-8137-455A2126D00B}.Release|x64.Build.0 = Release|x64
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Debug|Win32.Build.0 = Debug|Win32
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Debug|x64.ActiveCfg = Debug|x64
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Debug|x64.Build.0 = Debug|x64
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Release|Win32.ActiveCfg = Release|Win32
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Release|Win32.Build.0 = Release|Win32
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Release|x64.ActiveCfg = Release|x64
+		{F52BC9C3-DD65-4C80-845E-E1181C81C2C5}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
