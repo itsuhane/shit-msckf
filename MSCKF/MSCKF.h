@@ -45,12 +45,12 @@ public:
     Eigen::Vector3d cameraPosition() const { return m_p + JPL_CT(m_q)*m_p_cam_in_imu; }
 
 private:
+    // MotionSystem 需要在积分时获得当前的各种参数
+    friend class MotionSystem;
+
     size_t m_state_limit;            // 相机状态的个数上限
     JPL_Quaternion m_q_imu_to_cam;   // 从IMU坐标系到相机坐标系的旋转
     Eigen::Vector3d m_p_cam_in_imu;  // 相机中心在IMU坐标系中的坐标
-
-    // MotionSystem 需要在积分时获得当前的各种参数
-    friend class MotionSystem;
 
     Eigen::Matrix3d m_cov_ng;        // 角速度传感器协方差
     Eigen::Matrix3d m_cov_nwg;       // 角速度偏移噪音协方差
@@ -65,6 +65,8 @@ private:
     double m_g;                      // 重力加速度大小
 
     Eigen::Matrix15d m_PII;          // IMU状态的协方差
+    Eigen::MatrixXd  m_PIC;          // IMU和相机状态之间的协方差
+    Eigen::MatrixXd  m_PCC;          // 相机状态的协方差
 
     bool m_has_old = false;
     double m_t_old;

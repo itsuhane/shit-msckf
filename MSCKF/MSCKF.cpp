@@ -142,12 +142,6 @@ void MSCKF::propagate(double t, const Vector3d &w, const Vector3d &a) {
 
 void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> &matches) {
     //
-    // 计算当前相机姿态
-    //
-    JPL_Quaternion q_world_to_cam = JPL_Multiply(m_q_imu_to_cam, m_q);
-    Vector3d p_cam_in_world = m_p + JPL_CT(m_q)*m_p_cam_in_imu;
-
-    //
     // 首先进行跟踪，找出当前丢失的 track
     //
     unordered_map<size_t, vector<Vector2d>> continued_tracks; // 其中包含了所有跟踪下来的 track
@@ -177,7 +171,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
     //
     // 如果状态数依旧达到上限，在加入新的 state 前我们需要删除一些
-    //
+    // TODO: Modify m_PIC and m_PCC
 
     // 将删除过的 state 和 track 记录在这里
     vector<pair<Matrix3d, Vector3d>> new_states;
@@ -207,8 +201,10 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         }
     }
 
+    //
     // 进行 EKF 更新
-    // TODO here
+    // TODO: (17)~(33) here
+
     for (size_t i = 0; i < lost_tracks.size(); ++i) {
         Vector3d p = LinearLSTriangulation(lost_tracks[i], m_states);
     }
@@ -218,7 +214,10 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         }
     }
 
+    //
     // 添加新的状态
+    // TODO: (14)~(16) here
+
     if (m_states.size() == m_state_limit) {
         m_states.swap(new_states);
         m_tracks.swap(new_tracks);
@@ -226,6 +225,36 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     else { // 如果我们没从中间删除任何状态，所有track都在continued_tracks中
         m_tracks.swap(continued_tracks);
     }
+
+    // 计算当前相机姿态
+    // (14)
+    JPL_Quaternion q_world_to_cam = JPL_Multiply(m_q_imu_to_cam, m_q);
+    Vector3d imu_to_cam_shift_in_world = JPL_CT(m_q)*m_p_cam_in_imu;
+    Vector3d p_cam_in_world = m_p + imu_to_cam_shift_in_world;
+
+    // 增加新的状态
+    // (15)
+    // CHECK
+    Matrix<double, 6, 15> Jc; // (16) 中 J 矩阵左侧的 15 列作为 Jc 进行计算
+    Jc.setZero();
+    Jc.block<3, 3>(0, 0) = JPL_C(m_q_imu_to_cam);
+    Jc.block<3, 3>(3, 0) = JPL_Cross(imu_to_cam_shift_in_world);
+    Jc.block<3, 3>(3, 12).setIdentity();
+    Matrix<double, 15, 6> JcT = Jc.transpose();
+
+    MatrixXd PIC(15, m_PIC.cols() + 6);
+    PIC.block(0, 0, 15, m_PIC.cols()) = m_PIC;
+    PIC.block(0, m_PIC.cols(), 15, 6) = m_PII*JcT;
+
+    MatrixXd PCC(m_PCC.rows() + 6, m_PCC.cols() + 6);
+    PCC.block(0, 0, m_PCC.rows(), m_PCC.cols()) = m_PCC;
+    PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()) = Jc*m_PIC;
+    PCC.block(0, m_PCC.cols(), m_PCC.rows(), 6) = PCC.block(m_PCC.rows(), 0, 6, m_PCC.cols()).transpose();
+    PCC.block(m_PCC.rows(), m_PCC.cols(), 6, 6) = Jc*m_PII*JcT;
+
+    m_PIC.swap(PIC);
+    m_PCC.swap(PCC);
+
     Matrix3d R_world_to_cam = JPL_C(q_world_to_cam);
     Vector3d T_world_to_cam = -R_world_to_cam*p_cam_in_world;
     m_states.emplace_back(R_world_to_cam, T_world_to_cam);
