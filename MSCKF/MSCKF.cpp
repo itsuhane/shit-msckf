@@ -2,8 +2,6 @@
 #include "RK.h"
 #include "MVG.h"
 
-#include <iostream>
-
 using namespace std;
 using namespace Eigen;
 
@@ -216,7 +214,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
     //
     // Ìí¼ÓÐÂµÄ×´Ì¬
-    // TODO: (14)~(16) here
+    //
 
     if (m_states.size() == m_state_limit) {
         m_states.swap(new_states);
