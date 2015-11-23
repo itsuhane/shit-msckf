@@ -29,7 +29,7 @@ public:
     void propagate(double t, const Eigen::Vector3d &w, const Eigen::Vector3d &a);
 
     // 进行特征点跟踪，并进行增广或矫正
-    // features[被跟踪到的老帧中的特征id] = <跟踪到的新帧中的特征id，特征在新帧中的投影位置（已经除掉内参）>
+    // features[跟踪到的新帧中的特征id] = <被跟踪到的老帧中的特征id，特征在新帧中的投影位置（已经除掉内参）>
     void track(double t, const std::unordered_map<size_t, std::pair<size_t, Eigen::Vector2d>> &matches);
 
     // 获得当前传感器在世界坐标系中的朝向
@@ -65,29 +65,14 @@ private:
     double m_g;                      // 重力加速度大小
 
     Eigen::Matrix15d m_PII;          // IMU状态的协方差
-    //Eigen::MatrixXd  m_PIC;          // IMU和相机状态之间的协方差
-    //Eigen::MatrixXd  m_PCC;          // 相机状态的协方差
+    std::vector<Eigen::MatrixXd> m_PIC; // 分块表示的 PIC (IMU和相机状态之间的协方差)
+    std::vector<std::vector<Eigen::MatrixXd>> m_PCC; // 分块表示的 PCC 的上三角 (相机状态的协方差)
 
     bool m_has_old = false;
     double m_t_old;
     Eigen::Vector3d m_w_old;
     Eigen::Vector3d m_a_old;
 
-    struct CameraState { // 保存相机状态，伴随着保存 P_{IC} 和 P_{CC} 中需要的分量，参考 Readme
-        Eigen::Matrix3d R;
-        Eigen::Vector3d T;
-        Eigen::Matrix<double, 6, 15> Jc;
-        Eigen::Matrix<double, 15, 6> PIIxJcT;
-    };
-
-    std::vector<CameraState> m_states; // 相机 state，我们使用 R 和 T 代表论文中的 q 和 p
+    std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> m_states; // 相机 state，我们使用 R 和 T 代替论文中的 q 和 p
     std::unordered_map<size_t, std::vector<Eigen::Vector2d>> m_tracks; // 特征 tracks
-
-    // 使用 Linear LS 方法进行三角化，参考[5]
-    // xs 和 states 从后向前对应，xs 的长度不超过 states 的长度
-    Eigen::Vector3d LinearLSTriangulation(const std::vector<Eigen::Vector2d> &xs, const std::vector<CameraState> &states);
-
-    // 使用 Linear LS 方法进行三角化，参考[5]
-    // xs.second 代表 states 中的对应项
-    Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<CameraState> &states);
 };
