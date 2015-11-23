@@ -14,12 +14,12 @@ void Simulation_Propagation_CircularShifting(); // 圆形平移
 void Simulation_Propagation_CircularDriving(); // 圆形前进
 
 int main(int argc, char* argv[]) {
-    Simulation_Propagation_Static();
-    Simulation_Propagation_FixedSpeed();
-    Simulation_Propagation_FixedAcceleration();
-    Simulation_Propagation_SinusoidalShifting();
-    Simulation_Propagation_CircularShifting();
-    Simulation_Propagation_CircularDriving();
+    //Simulation_Propagation_Static();
+    //Simulation_Propagation_FixedSpeed();
+    //Simulation_Propagation_FixedAcceleration();
+    //Simulation_Propagation_SinusoidalShifting();
+    //Simulation_Propagation_CircularShifting();
+    //Simulation_Propagation_CircularDriving();
     return 0;
 }
 

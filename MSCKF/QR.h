@@ -7,7 +7,7 @@
 #include <Eigen/Eigen>
 
 // 计算 Givens 旋转用到的系数
-// 其中 a 为需要置零的元素， b 为用来置零的元素
+// 其中 a 为用来置零的元素， b 为需要置零的元素
 // 返回 c 为对应的 cos 分量，s 为 sin 分量
 inline void Givens(double a, double b, double &c, double &s) {
     if (abs(b)<1.0e-15) {
