@@ -158,6 +158,12 @@ void MSCKF::propagate(double t, const Vector3d &w, const Vector3d &a) {
         tie(m_q, m_v, m_p, m_PII, Phi) = rk.integrate(system, tie(m_q, m_v, m_p, m_PII, eye), m_t_old, t);
         m_q = JPL_Normalize(m_q);
     }
+
+    // eq. after (11)
+    for (size_t i = 0; i < m_PIC.size(); ++i) {
+        m_PIC[i] = Phi*m_PIC[i];
+    }
+
     m_t_old = t;
     m_w_old = w;
     m_a_old = a;
@@ -203,24 +209,15 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     //
 
     // 将删除过的 state 和 track 记录在这里
-    vector<pair<Matrix3d, Vector3d>> new_states;
+    vector<size_t> remaining_states_id;
     unordered_map<size_t, vector<Vector2d>> new_tracks;
-    vector<MatrixXd> new_PIC;
-    vector<vector<MatrixXd>> new_PCC;
 
     // 将被删除的 track 记录在这里，它还要结合 m_state 进行 update
     unordered_map<size_t, vector<pair<Vector2d, size_t>>> jumping_tracks;
     if (m_states.size() == m_state_limit) {
         for (size_t i = 0; i < m_states.size(); ++i) {
             if (i % 3 != 1) {
-                new_states.emplace_back(m_states[i]);
-                new_PIC.push_back(m_PIC[i]);
-                new_PCC.push_back(vector<MatrixXd>());
-                for (size_t j = 0; j < m_PCC[i].size(); ++j) {
-                    if (j % 3 != 1) {
-                        new_PCC.back().push_back(m_PCC[i][j]);
-                    }
-                }
+                remaining_states_id.push_back(i);
             }
         }
         for (auto& t : continued_tracks) { // 检查每个跟踪上的 track，从中去除相关联的特征组成独立的 track
@@ -340,6 +337,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         ro.block(row_start, 0, nrow - 3, 1) = rj.block(3, 0, nrow - 3, 1);
         row_start += nrow - 3;
     }
+    assert(row_start == HX.rows());
 
     // (28)(29)：将 HX 投影到它的 range，同样使用 Givens 旋转进行 QR 分解
     for (int col = 0; col < HX.cols(); ++col) {
@@ -361,16 +359,73 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         }
     }
 
-    // EKF Update
-    // TODO here
+    // 准备完整的协方差矩阵
+    MatrixXd P(m_states.size() * 6 + 15, m_states.size() * 6 + 15);
+    P.block<15, 15>(0, 0) = m_PII;
+    for (int i = 0; i < m_PIC.size(); ++i) {
+        P.block<15, 6>(0, 15 + 6 * i) = m_PIC[i];
+        P.block<6, 15>(15 + 6 * i, 0) = m_PIC[i].transpose();
+        for (int j = 0; j < m_PIC.size(); ++j) {
+            if (j <= i) {
+                P.block<6, 6>(15 + 6 * i, 15 + 6 * j) = m_PCC[i][j];
+            }
+            else {
+                P.block<6, 6>(15 + 6 * i, 15 + 6 * j) = m_PCC[j][i].transpose();
+            }
+        }
+    }
+
+    // 真实的 TH 左边 15 行为 0
+    MatrixXd TH(Hcols, 15 + Hcols);
+    TH.block(0, 0, Hcols, 15).setZero();
+    TH.block(0, 15, Hcols, Hcols) = HX.block(0, 0, Hcols, Hcols);
+
+    // (31)：计算卡尔曼增益
+    MatrixXd PTHT = P*TH.transpose();
+    MatrixXd PR = TH*PTHT;
+    for (int i = 0; i < PR.rows(); ++i) {
+        PR(i, i) += sigma_im_squared;
+    }
+    MatrixXd K = PTHT*PR.inverse();
+    // (32)：EKF状态更新
+    VectorXd dX = K*ro.block(0, 0, Hcols, 1);
+
+    // TODO: update states
+    
+    // (33)：EKF方差更新
+    MatrixXd KTH = K*TH;
+    for (int i = 0; i < KTH.rows(); ++i) {
+        KTH(i, i) -= 1;
+    }
+    MatrixXd Pnew = KTH*P*KTH.transpose()+(sigma_im_squared*K)*K.transpose();
+    
+    // 将 P 拆分为内部的表达
+    m_PII = Pnew.block<15, 15>(0, 0);
+    for (int i = 0; i < m_PIC.size(); ++i) {
+        m_PIC[i] = Pnew.block<15, 6>(0, 15 + 6 * i);
+        for (int j = 0; j <= i; ++j) {
+            m_PCC[i][j] = Pnew.block<6, 6>(15 + 6 * i, 15 + 6 * j);
+        }
+    }
 
     //
-    // 完成状态扩充
+    // 进行状态扩充
     //
 
     if (m_states.size() == m_state_limit) {
-        m_states.swap(new_states);
         m_tracks.swap(new_tracks);
+        vector<pair<Matrix3d, Vector3d>> new_states(remaining_states_id.size());
+        vector<MatrixXd> new_PIC(remaining_states_id.size());
+        vector<vector<MatrixXd>> new_PCC(remaining_states_id.size());
+        for (size_t i = 0; i < remaining_states_id.size(); ++i) {
+            new_states[i] = m_states[remaining_states_id[i]];
+            new_PIC[i] = m_PIC[remaining_states_id[i]];
+            new_PCC[i].resize(i+1);
+            for (size_t j = 0; j < new_PCC[i].size(); ++j) {
+                new_PCC[i][j] = m_PCC[remaining_states_id[i]][remaining_states_id[j]];
+            }
+        }
+        m_states.swap(new_states);
         m_PIC.swap(new_PIC);
         m_PCC.swap(new_PCC);
     }
