@@ -29,9 +29,6 @@
     <ClInclude Include="RK.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QR.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="JPL.h">
       <Filter>Header Files</Filter>
     </ClInclude>

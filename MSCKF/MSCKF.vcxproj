@@ -126,7 +126,6 @@
     <ClInclude Include="JPL.h" />
     <ClInclude Include="MSCKF.h" />
     <ClInclude Include="MVG.h" />
-    <ClInclude Include="QR.h" />
     <ClInclude Include="RK.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
