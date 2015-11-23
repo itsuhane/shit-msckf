@@ -5,6 +5,32 @@
 using namespace std;
 using namespace Eigen;
 
+// 计算 Givens 旋转用到的系数
+// 其中 a 为用来置零的元素， b 为需要置零的元素
+// 返回 c 为对应的 cos 分量，s 为 sin 分量
+inline void Givens(double a, double b, double &c, double &s) {
+    if (abs(b)<1.0e-15) {
+        c = copysign(1.0, a);
+        s = 0;
+    }
+    else if (abs(a)<1.0e-15) {
+        c = 0;
+        s = -copysign(1.0, b);
+    }
+    else if (abs(b) > abs(a)) {
+        double t = a / b;
+        double u = copysign(sqrt(1 + t*t), b);
+        s = -1.0 / u;
+        c = -s*t;
+    }
+    else {
+        double t = b / a;
+        double u = copysign(sqrt(1 + t*t), a);
+        c = 1.0 / u;
+        s = -c*t;
+    }
+}
+
 MSCKF::MSCKF() {
     // 各种参数的初始化
     m_state_limit = 30;
@@ -154,10 +180,9 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
     vector<vector<Vector2d>> lost_tracks; // 其中包含了丢失的 track
     for (auto &t : m_tracks) {
-        if (t.second.size() > 1) { // 当且仅当这个丢失的 track 包含了超过两个点，我们才考虑它，否则没有意义
-            lost_tracks.emplace_back(move(t.second));
-            useful_state_length = max(useful_state_length, lost_tracks.back().size());
-        }
+        lost_tracks.emplace_back(vector<Vector2d>());
+        lost_tracks.back().swap(t.second);
+        useful_state_length = max(useful_state_length, lost_tracks.back().size());
     }
 
     //
@@ -175,6 +200,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
     //
     // 如果状态数依旧达到上限，在加入新的 state 前我们需要删除一些
+    //
 
     // 将删除过的 state 和 track 记录在这里
     vector<pair<Matrix3d, Vector3d>> new_states;
@@ -213,18 +239,130 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         }
     }
 
-    //
-    // 进行 EKF 更新
-    // TODO: (17)~(33) here
-
+    // 把两类 track 统一，方便用同一段逻辑处理
+    vector<vector<pair<Vector2d, size_t>>> track_for_update; // 用于 update 的所有 track
+    vector<Vector3d> point_for_update; // 所有用于 update 的三维点
     for (size_t i = 0; i < lost_tracks.size(); ++i) {
-        Vector3d p = LinearLSTriangulation(lost_tracks[i], m_states);
+        if (lost_tracks[i].size() > 1) {
+            Vector3d p = LinearLSTriangulation(lost_tracks[i], m_states);
+            Vector3d q = m_states.back().first*p + m_states.back().second;
+            if (q.z()>0.1 && q.z() < 100.0) {
+                point_for_update.push_back(p);
+                track_for_update.emplace_back(vector<pair<Vector2d, size_t>>());
+                size_t jstart = m_states.size() - lost_tracks[i].size();
+                for (size_t j = 0; j < lost_tracks[i].size(); ++j) {
+                    track_for_update.back().emplace_back(lost_tracks[i][j], jstart + j);
+                }
+            }
+        }
     }
+
     for (auto &t : jumping_tracks) {
         if (t.second.size() > 1) {
             Vector3d p = LinearLSTriangulation(t.second, m_states);
+            size_t tid = t.second.back().second;
+            Vector3d q = m_states[tid].first*p + m_states[tid].second;
+            if (q.z()>0.1 && q.z() < 100.0) {
+                point_for_update.push_back(p);
+                track_for_update.emplace_back(move(t.second));
+            }
         }
     }
+
+    //
+    // 进行 EKF 更新
+    //
+
+    int Hrows = 0;
+    int Hcols = (int)m_states.size() * 6;
+
+    // 预先计算好 HX 的大小
+    for (size_t i = 0; i < track_for_update.size(); ++i) {
+        Hrows += (int)track_for_update[i].size() * 2 - 3;
+    }
+
+    MatrixXd HX(Hrows, Hcols);
+    VectorXd ro(Hrows, 1);
+
+    int row_start = 0;
+    for (size_t j = 0; j < track_for_update.size(); ++j) {
+        int nrow = (int)track_for_update[j].size() * 2;
+        MatrixXd HXj(nrow, Hcols);
+        MatrixXd Hfj(nrow, 3);
+        VectorXd rj(nrow);
+        HXj.setZero();
+        Hfj.setZero();
+        const Vector3d &pj = point_for_update[j];
+        for (size_t i = 0; i < track_for_update[j].size(); ++i) {
+            const size_t ii = track_for_update[j][i].second;
+            const Vector2d &zij = track_for_update[j][i].first;
+            const Matrix3d &Ri = m_states[ii].first;
+            const Vector3d &Ti = m_states[ii].second;
+            Vector3d Xji = Ri*pj + Ti;                                       // eq. after (20)
+            Vector2d zij_triangulated(Xji.x() / Xji.z(), Xji.y() / Xji.z()); // eq. after (20)
+            MatrixXd Jij(2, 3);                                              // eq. after (23)
+            Jij.setIdentity();                                               // eq. after (23)
+            Jij.block<2, 1>(0, 2) = -zij_triangulated;                       // eq. after (23)
+            Jij /= Xji.z();                                                  // eq. after (23)
+            MatrixXd Hfij = Jij*Ri;                                          // (23)
+            HXj.block<2, 3>(i * 2, ii * 6) = Jij*JPL_Cross(Xji);             // (22)
+            HXj.block<2, 3>(i * 2, ii * 6 + 3) = -Hfij;                      // (22)
+            Hfj.block<2, 3>(i * 2, 0) = Hfij;                                // (23)
+            rj.block<2, 1>(i * 2, 0) = zij - zij_triangulated;               // (20)
+        }
+
+        // (25)(26)：将 HXj 投影到 Hfj 的零空间，通过 Givens 旋转对 Hfj 进行 QR 分解完成
+        for (int col = 0; col < 3; ++col) {
+            for (int row = (int)Hfj.rows() - 1; row > col; --row) {
+                if (abs(Hfj(row, col)) > 1e-15) {
+                    double c, s;
+                    Givens(Hfj(row - 1, col), Hfj(row, col), c, s);
+                    for (int k = 0; k < 3; ++k) { // 这里我们只在乎右上三角，左下角可以直接置零或者忽略
+                        double a = c*Hfj(row - 1, k) - s*Hfj(row, k);
+                        double b = s*Hfj(row - 1, k) + c*Hfj(row, k);
+                        Hfj(row - 1, k) = a;
+                        Hfj(row, k) = b;
+                    }
+                    for (int k = 0; k < HXj.cols(); ++k) {
+                        double a = c*HXj(row - 1, k) - s*HXj(row, k);
+                        double b = s*HXj(row - 1, k) + c*HXj(row, k);
+                        HXj(row - 1, k) = a;
+                        HXj(row, k) = b;
+                    }
+                    double a = c*rj(row - 1) - s*rj(row);
+                    double b = s*rj(row - 1) + c*rj(row);
+                    rj(row - 1) = a;
+                    rj(row) = b;
+                }
+            }
+        }
+        HX.block(row_start, 0, nrow - 3, Hcols) = HXj.block(3, 0, nrow - 3, Hcols);
+        ro.block(row_start, 0, nrow - 3, 1) = rj.block(3, 0, nrow - 3, 1);
+        row_start += nrow - 3;
+    }
+
+    // (28)(29)：将 HX 投影到它的 range，同样使用 Givens 旋转进行 QR 分解
+    for (int col = 0; col < HX.cols(); ++col) {
+        for (int row = (int)HX.rows() - 1; row > col; --row) {
+            if (abs(HX(row, col)) > 1e-15) {
+                double c, s;
+                Givens(HX(row - 1, col), HX(row, col), c, s);
+                for (int k = 0; k < HX.cols(); ++k) { // 这里我们同样只关心右上三角，但其余部分需要置零
+                    double a = c*HX(row - 1, k) - s*HX(row, k);
+                    double b = s*HX(row - 1, k) + c*HX(row, k);
+                    HX(row - 1, k) = a;
+                    HX(row, k) = b;
+                }
+                double a = c*ro(row - 1) - s*ro(row);
+                double b = s*ro(row - 1) + c*ro(row);
+                ro(row - 1) = a;
+                ro(row) = b;
+            }
+        }
+    }
+
+    // EKF Update
+    // TODO here
 
     //
     // 完成状态扩充
