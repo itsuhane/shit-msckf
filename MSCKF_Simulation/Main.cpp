@@ -171,8 +171,8 @@ void Simulation_CircularDrivingTest() {
     int count = 0;
     for (double t = 0.0; t <= 10.0; t += 0.01) {
         Gaussian g(0.1);
-        rkf.setNoiseCov(Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0001, Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0001, 0.0001);
-        ekf.setNoiseCov(Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0001, Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0001, 0.0001);
+        rkf.setNoiseCov(Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0, Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0, 0.0);
+        ekf.setNoiseCov(Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0, Matrix3d::Identity()*0.1, Matrix3d::Identity()*0.0, 0.0);
 
         Vector3d gyro(0.0, w, 0.0);
         Vector3d acce(0.0, 0.0, -R*w*w);

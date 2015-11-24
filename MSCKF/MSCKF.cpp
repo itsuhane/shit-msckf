@@ -268,6 +268,10 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         }
     }
 
+    for (size_t i = 0; i < track_for_update.size(); ++i) {
+        point_for_update[i] = RefineTriangulation(point_for_update[i], track_for_update[i], m_states);
+    }
+
     //
     // 进行 EKF 更新
     //
@@ -302,7 +306,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
                 Vector2d zij_triangulated(Xji.x() / Xji.z(), Xji.y() / Xji.z()); // eq. after (20)
                 MatrixXd Jij(2, 3);                                              // eq. after (23)
                 Jij.setIdentity();                                               // eq. after (23)
-                Jij.block<2, 1>(0, 2) = -zij_triangulated;                       // eq. after (23)
+                Jij.col(2) = -zij_triangulated;                                  // eq. after (23)
                 Jij /= Xji.z();                                                  // eq. after (23)
                 MatrixXd Hfij = Jij*Ri;                                          // (23)
                 HXj.block<2, 3>(i * 2, ii * 6) = Jij*JPL_Cross(Xji);             // (22)

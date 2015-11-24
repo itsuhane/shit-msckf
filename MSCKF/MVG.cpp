@@ -1,7 +1,5 @@
 #include "MVG.h"
 
-#include <ceres/ceres.h>
-
 using namespace std;
 using namespace Eigen;
 
@@ -42,45 +40,31 @@ Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2
     return A.colPivHouseholderQr().solve(b);
 }
 
-struct TriangulateCostFunctor {
-    TriangulateCostFunctor(const Vector2d &x, const Matrix3d &r, const Vector3d &t) : x(x), r(r), t(t) {}
-
-    template <typename T>
-    bool operator() (const T* const p, T* residual) const {
-        T q[3];
-        for (int j = 0; j < 3; ++j) {
-            q[j] = T(t(j));
-            for (int i = 0; i < 3; ++i) {
-                q[j] += T(r(j, i))*p[i];
-            }
-        }
-        residual[0] = q[0] / q[2] - T(x[0]);
-        residual[1] = q[1] / q[2] - T(x[1]);
-        return true;
-    }
-
-    const Vector2d &x;
-    const Matrix3d &r;
-    const Vector3d &t;
-};
-
 Vector3d RefineTriangulation(const Vector3d &p0, const vector<pair<Vector2d, size_t>> &xs, const vector<pair<Matrix3d, Vector3d>> &states) {
     Vector3d p = p0;
-    ceres::Problem problem;
-    for (size_t i = 0; i < xs.size(); ++i) {
-        size_t ii = xs[i].second;
-        ceres::CostFunction* cf = new ceres::AutoDiffCostFunction<TriangulateCostFunctor, 2, 3>(new TriangulateCostFunctor(xs[i].first, states[ii].first, states[ii].second));
-        problem.AddResidualBlock(cf, nullptr, p.data());
+    for (int iter = 0; iter < 10; ++iter) {
+        Vector3d Jf = Vector3d::Zero();
+        Matrix3d Hr = Matrix3d::Zero();
+        for (size_t i = 0; i < xs.size(); ++i) {
+            const Vector2d &x = xs[i].first;
+            size_t ii = xs[i].second;
+            const Matrix3d &R = states[ii].first;
+            const Vector3d &T = states[ii].second;
+            Vector3d pc = R*p + T;
+            Vector2d xc(pc.x() / pc.z(), pc.y() / pc.z());
+            MatrixXd Jpi(2, 3);
+            Jpi.setIdentity();
+            Jpi.col(2) = -xc;
+            Jpi /= pc.z();
+            Vector2d rc = xc - x;
+            MatrixXd Jr = Jpi*R;
+            Jf += rc.transpose()*Jr;
+            Hr += Jr.transpose()*Jr;
+        }
+        Vector3d dp = Hr.colPivHouseholderQr().solve(Jf);
+        p -= dp;
+        if (dp.norm() < 1e-10) break;
     }
-    ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
-    options.minimizer_progress_to_stdout = false;
-    ceres::Solver::Summary summary;
-    ceres::Solve(options, &problem, &summary);
+
     return p;
 }
-//
-//Vector3d Triangulation(const vector<Vector2d> &xs, const vector<Matrix3d> &Rs, const vector<Vector3d> &Ts) {
-//    Vector3d p0 = LinearLSTriangulation(xs, Rs, Ts);
-//    return RefineTriangulation(p0, xs, Rs, Ts);
-//}
