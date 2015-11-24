@@ -6,9 +6,7 @@
     <Import Project="L:\gflags-2.1.1.props" />
     <Import Project="L:\glog-0.3.3.props" />
     <Import Project="L:\ceres-solver-1.9.0.props" />
-    <Import Project="L:\boost-1.57.0.props" />
     <Import Project="L:\eigen-3.2.2.props" />
-    <Import Project="L:\opencv-3.0.0-vc11.props" />
     <Import Project="L:\Legacy\quickblocks.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
