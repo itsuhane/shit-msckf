@@ -63,3 +63,9 @@ inline Eigen::Matrix4d JPL_Omega(const Eigen::Vector3d& w) {
         w.y(), -w.x(), 0.0, w.z(),
         -w.x(), -w.y(), -w.z(), 0.0).finished();
 }
+
+// [3] 中用小旋转 dq 修正 q
+inline JPL_Quaternion JPL_Correct(const JPL_Quaternion &q, const Eigen::Vector3d& dq) {
+    JPL_Quaternion p(dq.x(), dq.y(), dq.z(), 1.0);
+    return JPL_Normalize(JPL_Multiply(p, q));
+}

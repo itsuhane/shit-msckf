@@ -8,20 +8,18 @@
 #include <Eigen/Eigen>
 #include "JPL.h"
 
-// 三角化，参考[5]
-// 该函数求解 p 使得下面的关系对于全部的 i 成立
-//     Proj(Rs[i]*p+Ts[i]) = xs[i]
-// 求解过程为首先利用 Linear LS 求取初值，然后利用最小二乘优化
-//Eigen::Vector3d Triangulation(const std::vector<Eigen::Vector2d> &xs, const std::vector<Eigen::Matrix3d> &Rs, const std::vector<Eigen::Vector3d> &Ts);
 
 // 使用 Linear LS 方法进行三角化，参考[5]
+// 该函数求解 p 使得下面的关系对于全部的 i 成立
+//     Proj(Rs[i]*p+Ts[i]) = xs[i]
 // xs 和 states 从后向前对应，xs 的长度不超过 states 的长度
 Eigen::Vector3d LinearLSTriangulation(const std::vector<Eigen::Vector2d> &xs, const std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> &states);
 
 // 使用 Linear LS 方法进行三角化，参考[5]
+// 该函数求解 p 使得下面的关系对于全部的 i 成立
+//     Proj(Rs[i]*p+Ts[i]) = xs[i]
 // xs.second 代表 states 中的对应项
 Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> &states);
-//Eigen::Vector3d LinearLSTriangulation(const std::vector<Eigen::Vector2d> &xs, const std::vector<Eigen::Matrix3d> &Rs, const std::vector<Eigen::Vector3d> &Ts);
 
 // 根据初始值 p0 对三角化进行最小二乘优化
-//Eigen::Vector3d RefineTriangulation(const Eigen::Vector3d &p0, const std::vector<Eigen::Vector2d> &xs, const std::vector<Eigen::Matrix3d> &Rs, const std::vector<Eigen::Vector3d> &Ts);
+Eigen::Vector3d RefineTriangulation(const Eigen::Vector3d &p0, const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> &states);

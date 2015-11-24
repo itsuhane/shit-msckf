@@ -19,10 +19,10 @@ public:
     MSCKF();
 
     // 设置噪音的协方差大小
-    void setNoiseCov(const Eigen::Matrix3d &cov_ng, const Eigen::Matrix3d &cov_nwg, const Eigen::Matrix3d &cov_na, const Eigen::Matrix3d &cov_nwa);
+    void setNoiseCov(const Eigen::Matrix3d &cov_ng, const Eigen::Matrix3d &cov_nwg, const Eigen::Matrix3d &cov_na, const Eigen::Matrix3d &cov_nwa, double sigma_im_squared);
 
     // 初始化滤波器
-    // 需要提供初始的朝向、角速度偏差、速度、加速度偏差、位置、重力加速度
+    // 需要提供初始的旋转、角速度偏差、速度、加速度偏差、位置、重力加速度
     void initialize(const JPL_Quaternion &q, const Eigen::Vector3d &bg, const Eigen::Vector3d &v, const Eigen::Vector3d &ba, const Eigen::Vector3d &p, double g = 9.81);
 
     // 用 t 时刻的角速度和加速度来进行积分
@@ -44,6 +44,7 @@ public:
     // 获得当前相机在世界坐标系中的位置
     Eigen::Vector3d cameraPosition() const { return m_p + JPL_CT(m_q)*m_p_cam_in_imu; }
 
+    Eigen::Vector3d dp;
 private:
     // MotionSystem 需要在积分时获得当前的各种参数
     friend class MotionSystem;
@@ -51,7 +52,7 @@ private:
     size_t m_state_limit;            // 相机状态的个数上限
     JPL_Quaternion m_q_imu_to_cam;   // 从IMU坐标系到相机坐标系的旋转
     Eigen::Vector3d m_p_cam_in_imu;  // 相机中心在IMU坐标系中的坐标
-    double sigma_im_squared;         // 投影坐标的均方差
+    double m_sigma_im_squared;         // 投影坐标的均方差
 
     Eigen::Matrix3d m_cov_ng;        // 角速度传感器协方差
     Eigen::Matrix3d m_cov_nwg;       // 角速度偏移噪音协方差

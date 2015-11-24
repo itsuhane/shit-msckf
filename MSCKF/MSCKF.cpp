@@ -33,7 +33,7 @@ inline void Givens(double a, double b, double &c, double &s) {
 
 MSCKF::MSCKF() {
     // 各种参数的初始化
-    m_state_limit = 30;
+    m_state_limit = 10;
     Matrix3d R_imu_to_cam;
     R_imu_to_cam << -Vector3d::UnitY(), -Vector3d::UnitX(), -Vector3d::UnitZ();
     m_q_imu_to_cam = HamiltonToJPL(Quaterniond(R_imu_to_cam));
@@ -43,13 +43,15 @@ MSCKF::MSCKF() {
     m_cov_nwg.setIdentity();
     m_cov_na.setIdentity();
     m_cov_nwa.setIdentity();
+    m_sigma_im_squared = 1.0;
 }
 
-void MSCKF::setNoiseCov(const Matrix3d &cov_ng, const Matrix3d &cov_nwg, const Matrix3d &cov_na, const Matrix3d &cov_nwa) {
+void MSCKF::setNoiseCov(const Matrix3d &cov_ng, const Matrix3d &cov_nwg, const Matrix3d &cov_na, const Matrix3d &cov_nwa, double sigma_im_squared) {
     m_cov_ng = cov_ng;
     m_cov_nwg = cov_nwg;
     m_cov_na = cov_na;
     m_cov_nwa = cov_nwa;
+    m_sigma_im_squared = sigma_im_squared;
 }
 
 void MSCKF::initialize(const JPL_Quaternion &q, const Vector3d &bg, const Vector3d &v, const Vector3d &ba, const Vector3d &p, double g) {
@@ -278,133 +280,147 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         Hrows += (int)track_for_update[i].size() * 2 - 3;
     }
 
-    MatrixXd HX(Hrows, Hcols);
-    VectorXd ro(Hrows, 1);
+    if (Hrows > 0) {
+        MatrixXd HX(Hrows, Hcols);
+        VectorXd ro(Hrows, 1);
 
-    int row_start = 0;
-    for (size_t j = 0; j < track_for_update.size(); ++j) {
-        int nrow = (int)track_for_update[j].size() * 2;
-        MatrixXd HXj(nrow, Hcols);
-        MatrixXd Hfj(nrow, 3);
-        VectorXd rj(nrow);
-        HXj.setZero();
-        Hfj.setZero();
-        const Vector3d &pj = point_for_update[j];
-        for (size_t i = 0; i < track_for_update[j].size(); ++i) {
-            const size_t ii = track_for_update[j][i].second;
-            const Vector2d &zij = track_for_update[j][i].first;
-            const Matrix3d &Ri = m_states[ii].first;
-            const Vector3d &Ti = m_states[ii].second;
-            Vector3d Xji = Ri*pj + Ti;                                       // eq. after (20)
-            Vector2d zij_triangulated(Xji.x() / Xji.z(), Xji.y() / Xji.z()); // eq. after (20)
-            MatrixXd Jij(2, 3);                                              // eq. after (23)
-            Jij.setIdentity();                                               // eq. after (23)
-            Jij.block<2, 1>(0, 2) = -zij_triangulated;                       // eq. after (23)
-            Jij /= Xji.z();                                                  // eq. after (23)
-            MatrixXd Hfij = Jij*Ri;                                          // (23)
-            HXj.block<2, 3>(i * 2, ii * 6) = Jij*JPL_Cross(Xji);             // (22)
-            HXj.block<2, 3>(i * 2, ii * 6 + 3) = -Hfij;                      // (22)
-            Hfj.block<2, 3>(i * 2, 0) = Hfij;                                // (23)
-            rj.block<2, 1>(i * 2, 0) = zij - zij_triangulated;               // (20)
+        int row_start = 0;
+        for (size_t j = 0; j < track_for_update.size(); ++j) {
+            int nrow = (int)track_for_update[j].size() * 2;
+            MatrixXd HXj(nrow, Hcols);
+            MatrixXd Hfj(nrow, 3);
+            VectorXd rj(nrow);
+            HXj.setZero();
+            Hfj.setZero();
+            const Vector3d &pj = point_for_update[j];
+            for (size_t i = 0; i < track_for_update[j].size(); ++i) {
+                const size_t ii = track_for_update[j][i].second;
+                const Vector2d &zij = track_for_update[j][i].first;
+                const Matrix3d &Ri = m_states[ii].first;
+                const Vector3d &Ti = m_states[ii].second;
+                Vector3d Xji = Ri*pj + Ti;                                       // eq. after (20)
+                Vector2d zij_triangulated(Xji.x() / Xji.z(), Xji.y() / Xji.z()); // eq. after (20)
+                MatrixXd Jij(2, 3);                                              // eq. after (23)
+                Jij.setIdentity();                                               // eq. after (23)
+                Jij.block<2, 1>(0, 2) = -zij_triangulated;                       // eq. after (23)
+                Jij /= Xji.z();                                                  // eq. after (23)
+                MatrixXd Hfij = Jij*Ri;                                          // (23)
+                HXj.block<2, 3>(i * 2, ii * 6) = Jij*JPL_Cross(Xji);             // (22)
+                HXj.block<2, 3>(i * 2, ii * 6 + 3) = -Hfij;                      // (22)
+                Hfj.block<2, 3>(i * 2, 0) = Hfij;                                // (23)
+                rj.block<2, 1>(i * 2, 0) = zij - zij_triangulated;               // (20)
+            }
+
+            // (25)(26)：将 HXj 投影到 Hfj 的零空间，通过 Givens 旋转对 Hfj 进行 QR 分解完成
+            for (int col = 0; col < 3; ++col) {
+                for (int row = (int)Hfj.rows() - 1; row > col; --row) {
+                    if (abs(Hfj(row, col)) > 1e-15) {
+                        double c, s;
+                        Givens(Hfj(row - 1, col), Hfj(row, col), c, s);
+                        for (int k = 0; k < 3; ++k) { // 这里我们只在乎右上三角，左下角可以直接置零或者忽略
+                            double a = c*Hfj(row - 1, k) - s*Hfj(row, k);
+                            double b = s*Hfj(row - 1, k) + c*Hfj(row, k);
+                            Hfj(row - 1, k) = a;
+                            Hfj(row, k) = b;
+                        }
+                        for (int k = 0; k < HXj.cols(); ++k) {
+                            double a = c*HXj(row - 1, k) - s*HXj(row, k);
+                            double b = s*HXj(row - 1, k) + c*HXj(row, k);
+                            HXj(row - 1, k) = a;
+                            HXj(row, k) = b;
+                        }
+                        double a = c*rj(row - 1) - s*rj(row);
+                        double b = s*rj(row - 1) + c*rj(row);
+                        rj(row - 1) = a;
+                        rj(row) = b;
+                    }
+                }
+            }
+            HX.block(row_start, 0, nrow - 3, Hcols) = HXj.block(3, 0, nrow - 3, Hcols);
+            ro.block(row_start, 0, nrow - 3, 1) = rj.block(3, 0, nrow - 3, 1);
+            row_start += nrow - 3;
         }
 
-        // (25)(26)：将 HXj 投影到 Hfj 的零空间，通过 Givens 旋转对 Hfj 进行 QR 分解完成
-        for (int col = 0; col < 3; ++col) {
-            for (int row = (int)Hfj.rows() - 1; row > col; --row) {
-                if (abs(Hfj(row, col)) > 1e-15) {
+        // (28)(29)：将 HX 投影到它的 range，同样使用 Givens 旋转进行 QR 分解
+        for (int col = 0; col < HX.cols(); ++col) {
+            for (int row = (int)HX.rows() - 1; row > col; --row) {
+                if (abs(HX(row, col)) > 1e-15) {
                     double c, s;
-                    Givens(Hfj(row - 1, col), Hfj(row, col), c, s);
-                    for (int k = 0; k < 3; ++k) { // 这里我们只在乎右上三角，左下角可以直接置零或者忽略
-                        double a = c*Hfj(row - 1, k) - s*Hfj(row, k);
-                        double b = s*Hfj(row - 1, k) + c*Hfj(row, k);
-                        Hfj(row - 1, k) = a;
-                        Hfj(row, k) = b;
+                    Givens(HX(row - 1, col), HX(row, col), c, s);
+                    for (int k = 0; k < HX.cols(); ++k) { // 这里我们同样只关心右上三角，但其余部分需要置零
+                        double a = c*HX(row - 1, k) - s*HX(row, k);
+                        double b = s*HX(row - 1, k) + c*HX(row, k);
+                        HX(row - 1, k) = a;
+                        HX(row, k) = b;
                     }
-                    for (int k = 0; k < HXj.cols(); ++k) {
-                        double a = c*HXj(row - 1, k) - s*HXj(row, k);
-                        double b = s*HXj(row - 1, k) + c*HXj(row, k);
-                        HXj(row - 1, k) = a;
-                        HXj(row, k) = b;
-                    }
-                    double a = c*rj(row - 1) - s*rj(row);
-                    double b = s*rj(row - 1) + c*rj(row);
-                    rj(row - 1) = a;
-                    rj(row) = b;
+                    double a = c*ro(row - 1) - s*ro(row);
+                    double b = s*ro(row - 1) + c*ro(row);
+                    ro(row - 1) = a;
+                    ro(row) = b;
                 }
             }
         }
-        HX.block(row_start, 0, nrow - 3, Hcols) = HXj.block(3, 0, nrow - 3, Hcols);
-        ro.block(row_start, 0, nrow - 3, 1) = rj.block(3, 0, nrow - 3, 1);
-        row_start += nrow - 3;
-    }
-    assert(row_start == HX.rows());
 
-    // (28)(29)：将 HX 投影到它的 range，同样使用 Givens 旋转进行 QR 分解
-    for (int col = 0; col < HX.cols(); ++col) {
-        for (int row = (int)HX.rows() - 1; row > col; --row) {
-            if (abs(HX(row, col)) > 1e-15) {
-                double c, s;
-                Givens(HX(row - 1, col), HX(row, col), c, s);
-                for (int k = 0; k < HX.cols(); ++k) { // 这里我们同样只关心右上三角，但其余部分需要置零
-                    double a = c*HX(row - 1, k) - s*HX(row, k);
-                    double b = s*HX(row - 1, k) + c*HX(row, k);
-                    HX(row - 1, k) = a;
-                    HX(row, k) = b;
+        // 准备完整的协方差矩阵
+        MatrixXd P(m_states.size() * 6 + 15, m_states.size() * 6 + 15);
+        P.block<15, 15>(0, 0) = m_PII;
+        for (int i = 0; i < m_PIC.size(); ++i) {
+            P.block<15, 6>(0, 15 + 6 * i) = m_PIC[i];
+            P.block<6, 15>(15 + 6 * i, 0) = m_PIC[i].transpose();
+            for (int j = 0; j <= i; ++j) {
+                P.block<6, 6>(15 + 6 * j, 15 + 6 * i) = m_PCC[i][j];
+                if (i != j) {
+                    P.block<6, 6>(15 + 6 * i, 15 + 6 * j) = m_PCC[i][j].transpose();
                 }
-                double a = c*ro(row - 1) - s*ro(row);
-                double b = s*ro(row - 1) + c*ro(row);
-                ro(row - 1) = a;
-                ro(row) = b;
             }
         }
-    }
 
-    // 准备完整的协方差矩阵
-    MatrixXd P(m_states.size() * 6 + 15, m_states.size() * 6 + 15);
-    P.block<15, 15>(0, 0) = m_PII;
-    for (int i = 0; i < m_PIC.size(); ++i) {
-        P.block<15, 6>(0, 15 + 6 * i) = m_PIC[i];
-        P.block<6, 15>(15 + 6 * i, 0) = m_PIC[i].transpose();
-        for (int j = 0; j < m_PIC.size(); ++j) {
-            if (j <= i) {
-                P.block<6, 6>(15 + 6 * i, 15 + 6 * j) = m_PCC[i][j];
-            }
-            else {
-                P.block<6, 6>(15 + 6 * i, 15 + 6 * j) = m_PCC[j][i].transpose();
-            }
+        int Trows = min(Hrows, Hcols);
+
+        // 真实的 TH 左边 15 行为 0
+        MatrixXd TH(Trows, 15 + Hcols);
+        TH.block(0, 0, Trows, 15).setZero();
+        TH.block(0, 15, Trows, Hcols) = HX.block(0, 0, Trows, Hcols);
+
+        // (31)：计算卡尔曼增益
+        MatrixXd PTHT = P*TH.transpose();
+        MatrixXd PR = TH*PTHT;
+        for (int i = 0; i < PR.rows(); ++i) {
+            PR(i, i) += m_sigma_im_squared;
         }
-    }
+        MatrixXd K = PTHT*PR.inverse();
+        // (32)：EKF状态更新
+        VectorXd dX = K*ro.block(0, 0, Trows, 1);
 
-    // 真实的 TH 左边 15 行为 0
-    MatrixXd TH(Hcols, 15 + Hcols);
-    TH.block(0, 0, Hcols, 15).setZero();
-    TH.block(0, 15, Hcols, Hcols) = HX.block(0, 0, Hcols, Hcols);
+        m_q = JPL_Correct(m_q, dX.block<3, 1>(0, 0));
+        m_bg += dX.block<3, 1>(3, 0);
+        m_v += dX.block<3, 1>(6, 0);
+        m_ba += dX.block<3, 1>(9, 0);
+        m_p += dX.block<3, 1>(12, 0);
 
-    // (31)：计算卡尔曼增益
-    MatrixXd PTHT = P*TH.transpose();
-    MatrixXd PR = TH*PTHT;
-    for (int i = 0; i < PR.rows(); ++i) {
-        PR(i, i) += sigma_im_squared;
-    }
-    MatrixXd K = PTHT*PR.inverse();
-    // (32)：EKF状态更新
-    VectorXd dX = K*ro.block(0, 0, Hcols, 1);
+        for (size_t i = 0; i < m_states.size(); ++i) {
+            JPL_Quaternion q = HamiltonToJPL(Quaterniond(m_states[i].first));
+            q = JPL_Correct(q, dX.block<3, 1>(15 + i * 6, 0));
+            Vector3d p = -(m_states[i].first.transpose()*m_states[i].second);
+            p += dX.block<3, 1>(18 + i * 6, 0);
+            m_states[i].first = JPL_toHamilton(q).toRotationMatrix();
+            m_states[i].second = -m_states[i].first*p;
+        }
 
-    // TODO: update states
-    
-    // (33)：EKF方差更新
-    MatrixXd KTH = K*TH;
-    for (int i = 0; i < KTH.rows(); ++i) {
-        KTH(i, i) -= 1;
-    }
-    MatrixXd Pnew = KTH*P*KTH.transpose()+(sigma_im_squared*K)*K.transpose();
-    
-    // 将 P 拆分为内部的表达
-    m_PII = Pnew.block<15, 15>(0, 0);
-    for (int i = 0; i < m_PIC.size(); ++i) {
-        m_PIC[i] = Pnew.block<15, 6>(0, 15 + 6 * i);
-        for (int j = 0; j <= i; ++j) {
-            m_PCC[i][j] = Pnew.block<6, 6>(15 + 6 * i, 15 + 6 * j);
+        // (33)：EKF方差更新
+        MatrixXd KTH = K*TH;
+        for (int i = 0; i < KTH.rows(); ++i) {
+            KTH(i, i) -= 1;
+        }
+        MatrixXd Pnew = KTH*P*KTH.transpose() + (m_sigma_im_squared*K)*K.transpose();
+
+        // 将 P 拆分为内部的表达
+        m_PII = Pnew.block<15, 15>(0, 0);
+        for (int i = 0; i < m_PIC.size(); ++i) {
+            m_PIC[i] = Pnew.block<15, 6>(0, 15 + 6 * i);
+            for (int j = 0; j <= i; ++j) {
+                m_PCC[i][j] = Pnew.block<6, 6>(15 + 6 * j, 15 + 6 * i);
+            }
         }
     }
 
