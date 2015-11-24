@@ -2,7 +2,6 @@
 #include <functional>
 #include <random>
 #include "MSCKF.h"
-#include <ceres/ceres.h>
 #include <qb/meshio.hpp>
 
 using namespace std;
@@ -34,7 +33,6 @@ void Simulation_Propagation_CircularDriving(); // т╡пнг╟╫Ь
 void Simulation_CircularDrivingTest();
 
 int main(int argc, char* argv[]) {
-    google::InitGoogleLogging(argv[0]);
     Simulation_CircularDrivingTest();
     return 0;
 }
@@ -197,6 +195,7 @@ void Simulation_CircularDrivingTest() {
                     matches[i] = make_pair(i, Vector2d(q.x()/q.z(), q.y()/q.z()));
                 }
             }
+            cout << "Match" << endl;
             ekf.track(t, matches);
             if (ekf.position().norm() < 20) {
                 addAxis(error, ekf.orientation(), ekf.position());
@@ -204,10 +203,6 @@ void Simulation_CircularDrivingTest() {
                     addLine(error, ekf.position(), ekf.dp);
                 }
             }
-            //getchar();
-            //char fn[255];
-            //sprintf_s(fn, "E:\\SensorFusion\\Synthesis\\CircularDrivingTest-Frame-%03d.ply", count);
-            //frame.save(fn);
 #endif
         }
         count++;
