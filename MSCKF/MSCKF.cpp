@@ -1,7 +1,7 @@
 #include "MSCKF.h"
 #include "RK.h"
 #include "MVG.h"
-#include <iostream>
+
 using namespace std;
 using namespace Eigen;
 
@@ -269,7 +269,6 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     }
 
     for (size_t i = 0; i < track_for_update.size(); ++i) {
-        cout << "    Refine" << endl;
         point_for_update[i] = RefineTriangulation(point_for_update[i], track_for_update[i], m_states);
     }
 
