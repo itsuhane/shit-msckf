@@ -195,7 +195,6 @@ void Simulation_CircularDrivingTest() {
                     matches[i] = make_pair(i, Vector2d(q.x()/q.z(), q.y()/q.z()));
                 }
             }
-            cout << "Match" << endl;
             ekf.track(t, matches);
             if (ekf.position().norm() < 20) {
                 addAxis(error, ekf.orientation(), ekf.position());
