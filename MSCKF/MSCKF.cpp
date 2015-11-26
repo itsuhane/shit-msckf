@@ -1,6 +1,5 @@
 #include "MSCKF.h"
 #include "RK.h"
-#include "MVG.h"
 
 using namespace std;
 using namespace Eigen;
@@ -264,7 +263,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     for (size_t i = 0; i < lost_tracks.size(); ++i) {
         if (lost_tracks[i].size() > 1) {
             Vector3d p = LinearLSTriangulation(lost_tracks[i], m_states);
-            Vector3d q = m_states.back().first*p + m_states.back().second;
+            Vector3d q = m_states.back().R*p + m_states.back().T;
             if (q.z()>0.1 && q.z() < 100.0) {
                 point_for_update.push_back(p);
                 track_for_update.emplace_back(vector<pair<Vector2d, size_t>>());
@@ -280,7 +279,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         if (t.second.size() > 1) {
             Vector3d p = LinearLSTriangulation(t.second, m_states);
             size_t tid = t.second.back().second;
-            Vector3d q = m_states[tid].first*p + m_states[tid].second;
+            Vector3d q = m_states[tid].R*p + m_states[tid].T;
             if (q.z()>0.1 && q.z() < 100.0) {
                 point_for_update.push_back(p);
                 track_for_update.emplace_back(move(t.second));
@@ -320,8 +319,8 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
             for (size_t i = 0; i < track_for_update[j].size(); ++i) {
                 const size_t ii = track_for_update[j][i].second;
                 const Vector2d &zij = track_for_update[j][i].first;
-                const Matrix3d &Ri = m_states[ii].first;
-                const Vector3d &Ti = m_states[ii].second;
+                const Matrix3d &Ri = m_states[ii].R;
+                const Vector3d &Ti = m_states[ii].T;
                 Vector3d Xji = Ri*pj + Ti;                                       // eq. after (20)
                 Vector2d zij_triangulated(Xji.x() / Xji.z(), Xji.y() / Xji.z()); // eq. after (20)
                 MatrixXd Jij(2, 3);                                              // eq. after (23)
@@ -423,12 +422,12 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         m_p += dX.block<3, 1>(12, 0);
 
         for (size_t i = 0; i < m_states.size(); ++i) {
-            JPL_Quaternion q = HamiltonToJPL(Quaterniond(m_states[i].first));
+            JPL_Quaternion q = HamiltonToJPL(Quaterniond(m_states[i].R));
             q = JPL_Correct(q, dX.block<3, 1>(15 + i * 6, 0));
-            Vector3d p = -(m_states[i].first.transpose()*m_states[i].second);
+            Vector3d p = -(m_states[i].R.transpose()*m_states[i].T);
             p += dX.block<3, 1>(18 + i * 6, 0);
-            m_states[i].first = JPL_toHamilton(q).toRotationMatrix();
-            m_states[i].second = -m_states[i].first*p;
+            m_states[i].R = JPL_toHamilton(q).toRotationMatrix();
+            m_states[i].T = -m_states[i].R*p;
         }
 
         // (33)：EKF方差更新
@@ -454,7 +453,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
     if (m_states.size() == m_state_limit) {
         m_tracks.swap(new_tracks);
-        vector<pair<Matrix3d, Vector3d>> new_states(remaining_states_id.size());
+        vector<CameraState> new_states(remaining_states_id.size());
         vector<MatrixXd> new_PIC(remaining_states_id.size());
         vector<vector<MatrixXd>> new_PCC(remaining_states_id.size());
         for (size_t i = 0; i < remaining_states_id.size(); ++i) {
@@ -500,5 +499,8 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     // 增加新的状态
     Matrix3d R_world_to_cam = JPL_C(q_world_to_cam);
     Vector3d T_world_to_cam = -R_world_to_cam*p_cam_in_world;
-    m_states.emplace_back(R_world_to_cam, T_world_to_cam);
+    CameraState state;
+    state.R = R_world_to_cam;
+    state.T = T_world_to_cam;
+    m_states.emplace_back(state);
 }

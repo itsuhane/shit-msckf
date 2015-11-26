@@ -3,7 +3,7 @@
 using namespace std;
 using namespace Eigen;
 
-Vector3d LinearLSTriangulation(const vector<Vector2d> &xs, const vector<pair<Matrix3d, Vector3d>> &states) {
+Vector3d LinearLSTriangulation(const vector<Vector2d> &xs, const vector<CameraState> &states) {
     MatrixX3d A;
     VectorXd b;
     A.resize(xs.size() * 2, 3);
@@ -11,8 +11,8 @@ Vector3d LinearLSTriangulation(const vector<Vector2d> &xs, const vector<pair<Mat
     size_t sstart = states.size() - xs.size();
     for (size_t i = 0; i < xs.size(); ++i) {
         const Vector2d & x = xs[i];
-        const Matrix3d & R = states[sstart+i].first;
-        const Vector3d & T = states[sstart+i].second;
+        const Matrix3d & R = states[sstart+i].R;
+        const Vector3d & T = states[sstart+i].T;
         A.row(i * 2) = R.row(0) - x(0)*R.row(2);
         A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
         b(i * 2) = x(0)*T(2) - T(0);
@@ -22,15 +22,15 @@ Vector3d LinearLSTriangulation(const vector<Vector2d> &xs, const vector<pair<Mat
     return A.colPivHouseholderQr().solve(b);
 }
 
-Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs, const std::vector<std::pair<Eigen::Matrix3d, Eigen::Vector3d>> &states) {
+Eigen::Vector3d LinearLSTriangulation(const vector<pair<Vector2d, size_t>> &xs, const vector<CameraState> &states) {
     MatrixX3d A;
     VectorXd b;
     A.resize(xs.size() * 2, 3);
     b.resize(xs.size() * 2);
     for (size_t i = 0; i < xs.size(); ++i) {
         const Vector2d & x = xs[i].first;
-        const Matrix3d & R = states[xs[i].second].first;
-        const Vector3d & T = states[xs[i].second].second;
+        const Matrix3d & R = states[xs[i].second].R;
+        const Vector3d & T = states[xs[i].second].T;
         A.row(i * 2) = R.row(0) - x(0)*R.row(2);
         A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
         b(i * 2) = x(0)*T(2) - T(0);
@@ -40,7 +40,7 @@ Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2
     return A.colPivHouseholderQr().solve(b);
 }
 
-Vector3d RefineTriangulation(const Vector3d &p0, const vector<pair<Vector2d, size_t>> &xs, const vector<pair<Matrix3d, Vector3d>> &states) {
+Vector3d RefineTriangulation(const Vector3d &p0, const vector<pair<Vector2d, size_t>> &xs, const vector<CameraState> &states) {
     Vector3d p = p0;
     for (int iter = 0; iter < 10; ++iter) {
         Vector3d Jf = Vector3d::Zero();
@@ -48,8 +48,8 @@ Vector3d RefineTriangulation(const Vector3d &p0, const vector<pair<Vector2d, siz
         for (size_t i = 0; i < xs.size(); ++i) {
             const Vector2d &x = xs[i].first;
             size_t ii = xs[i].second;
-            const Matrix3d &R = states[ii].first;
-            const Vector3d &T = states[ii].second;
+            const Matrix3d &R = states[ii].R;
+            const Vector3d &T = states[ii].T;
             Vector3d pc = R*p + T;
             Vector2d xc(pc.x() / pc.z(), pc.y() / pc.z());
             MatrixXd Jpi(2, 3);
