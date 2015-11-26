@@ -44,7 +44,6 @@ public:
     // 获得当前相机在世界坐标系中的位置
     Eigen::Vector3d cameraPosition() const { return m_p + JPL_CT(m_q)*m_p_cam_in_imu; }
 
-    Eigen::Vector3d dp;
 private:
     // MotionSystem 需要在积分时获得当前的各种参数
     friend class MotionSystem;
@@ -52,7 +51,7 @@ private:
     size_t m_state_limit;            // 相机状态的个数上限
     JPL_Quaternion m_q_imu_to_cam;   // 从IMU坐标系到相机坐标系的旋转
     Eigen::Vector3d m_p_cam_in_imu;  // 相机中心在IMU坐标系中的坐标
-    double m_sigma_im_squared;         // 投影坐标的均方差
+    double m_sigma_im_squared;       // 投影坐标的均方差
 
     Eigen::Matrix3d m_cov_ng;        // 角速度传感器协方差
     Eigen::Matrix3d m_cov_nwg;       // 角速度偏移噪音协方差

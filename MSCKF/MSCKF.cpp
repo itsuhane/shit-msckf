@@ -402,8 +402,6 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         m_ba += dX.block<3, 1>(9, 0);
         m_p += dX.block<3, 1>(12, 0);
 
-        dp = dX.block<3, 1>(12, 0);
-
         for (size_t i = 0; i < m_states.size(); ++i) {
             JPL_Quaternion q = HamiltonToJPL(Quaterniond(m_states[i].first));
             q = JPL_Correct(q, dX.block<3, 1>(15 + i * 6, 0));
