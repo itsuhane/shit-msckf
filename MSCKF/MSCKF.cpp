@@ -61,6 +61,10 @@ void MSCKF::initialize(const JPL_Quaternion &q, const Vector3d &bg, const Vector
     m_ba = ba;
     m_p = p;
     m_g = g;
+    m_PII.block<3, 3>(0, 0) = m_cov_ng;
+    m_PII.block<3, 3>(3, 3) = m_cov_nwg;
+    m_PII.block<3, 3>(6, 6) = m_cov_na;
+    m_PII.block<3, 3>(9, 9) = m_cov_nwa;
 }
 
 // [1] 中的 (9)(12)和(13)，bg 和 ba 是固定的，所以没有包含在这里，而PII和Phi都需要在相同的时间内进行积分所以包含在了这里
@@ -170,6 +174,22 @@ void MSCKF::propagate(double t, const Vector3d &w, const Vector3d &a) {
     m_w_old = w;
     m_a_old = a;
     m_has_old = true;
+}
+
+void MSCKF::track(double t, const Vector3d &position, double sigma_p) {
+    MatrixXd H(3, 15);
+    H.setZero();
+    H.block<3, 3>(0, 12).setIdentity();
+    Vector3d r = position - m_p;
+    MatrixXd K = m_PII*H.transpose()*(H*m_PII*H.transpose() + Matrix3d::Identity()*sigma_p);
+    VectorXd dX = K*r;
+    m_q = JPL_Correct(m_q, dX.block<3, 1>(0, 0));
+    m_bg += dX.block<3, 1>(3, 0);
+    m_v += dX.block<3, 1>(6, 0);
+    m_ba += dX.block<3, 1>(9, 0);
+    m_p += dX.block<3, 1>(12, 0);
+    MatrixXd S = MatrixXd::Identity(15, 15) - K*H;
+    m_PII = S*m_PII*S.transpose() + K*(Matrix3d::Identity()*sigma_p)*K.transpose();
 }
 
 void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> &matches) {
