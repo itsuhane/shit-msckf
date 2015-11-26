@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <functional>
 #include <Eigen/Eigen>
 #include "JPL.h"
 
@@ -40,6 +41,8 @@ public:
 
     // 获得当前传感器在世界坐标系中的位置
     Eigen::Vector3d position() const { return m_p; }
+
+    Eigen::Matrix3d positionCovariance() const { return m_PII.block<3, 3>(12, 12); }
 
     // 获得当前相机在世界坐标系中的朝向
     Eigen::Quaterniond cameraOrientation() const { return JPL_toHamilton(JPL_Multiply(m_q_imu_to_cam, m_q)).conjugate(); }

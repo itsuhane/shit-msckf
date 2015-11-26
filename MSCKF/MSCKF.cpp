@@ -401,7 +401,7 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
 
         int Trows = min(Hrows, Hcols);
 
-        // 真实的 TH 左边 15 行为 0
+        // 真实的 TH 左边 15 列为 0
         MatrixXd TH(Trows, 15 + Hcols);
         TH.block(0, 0, Trows, 15).setZero();
         TH.block(0, 15, Trows, Hcols) = HX.block(0, 0, Trows, Hcols);
@@ -436,14 +436,14 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
         for (int i = 0; i < KTH.rows(); ++i) {
             KTH(i, i) -= 1;
         }
-        MatrixXd Pnew = KTH*P*KTH.transpose() + (m_sigma_im_squared*K)*K.transpose();
+        MatrixXd Pnew = KTH*P*KTH.transpose() + m_sigma_im_squared*(K*K.transpose());
 
         // 将 P 拆分为内部的表达
-        m_PII = Pnew.block<15, 15>(0, 0);
+        m_PII = 0.5*(Pnew.block<15, 15>(0, 0) + Pnew.block<15, 15>(0, 0).transpose());
         for (int i = 0; i < m_PIC.size(); ++i) {
-            m_PIC[i] = Pnew.block<15, 6>(0, 15 + 6 * i);
+            m_PIC[i] = 0.5*(Pnew.block<15, 6>(0, 15 + 6 * i) + Pnew.block<6, 15>(15 + 6 * i, 0).transpose());
             for (int j = 0; j <= i; ++j) {
-                m_PCC[i][j] = Pnew.block<6, 6>(15 + 6 * j, 15 + 6 * i);
+                m_PCC[i][j] = 0.5*(Pnew.block<6, 6>(15 + 6 * j, 15 + 6 * i) + Pnew.block<6, 6>(15 + 6 * i, 15 + 6 * j).transpose());
             }
         }
     }
@@ -492,8 +492,10 @@ void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> 
     for (size_t i = 0; i < m_PIC.size(); ++i) {
         m_PCC.back().push_back((Jc*m_PIC[i]).transpose());
     }
-    m_PCC.back().push_back(Jc*m_PII*JcT);
-    m_PIC.push_back(m_PII*JcT);
+    MatrixXd PIC_block = m_PII*JcT;
+    m_PIC.push_back(PIC_block);
+    MatrixXd PCC_block = Jc*PIC_block;
+    m_PCC.back().push_back(0.5*(PCC_block+PCC_block.transpose()));
 
     // 增加新的状态
     Matrix3d R_world_to_cam = JPL_C(q_world_to_cam);
