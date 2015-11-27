@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
         size_t fsize = 0;
         if (counter % 3 == 0) {
             auto frame = frameFeature(features, ekf_true.cameraOrientation(), ekf_true.cameraPosition(), nim);
-            ekf.track(t, frame);
+            ekf.update(t, frame);
             fsize = frame.size();
         }
         counter++;

@@ -175,7 +175,7 @@ void MSCKF::propagate(double t, const Vector3d &w, const Vector3d &a) {
     m_has_old = true;
 }
 
-void MSCKF::track(double t, const Vector3d &position, double sigma_p) {
+void MSCKF::update(double t, const Vector3d &position, double sigma_p) {
     MatrixXd H(3, 15);
     H.setZero();
     H.block<3, 3>(0, 12).setIdentity();
@@ -191,7 +191,7 @@ void MSCKF::track(double t, const Vector3d &position, double sigma_p) {
     m_PII = S*m_PII*S.transpose() + K*(Matrix3d::Identity()*sigma_p)*K.transpose();
 }
 
-void MSCKF::track(double t, const unordered_map<size_t, pair<size_t, Vector2d>> &matches) {
+void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>> &matches) {
     //
     // 首先进行跟踪，找出当前丢失的 track
     //

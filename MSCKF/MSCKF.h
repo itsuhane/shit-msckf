@@ -31,11 +31,11 @@ public:
     void propagate(double t, const Eigen::Vector3d &w, const Eigen::Vector3d &a);
 
     // 使用 GPS 信号进行更新
-    void track(double t, const Eigen::Vector3d &position, double sigma_p);
+    void update(double t, const Eigen::Vector3d &position, double sigma_p);
 
     // 进行特征点跟踪，并进行增广或矫正
     // features[跟踪到的新帧中的特征id] = <被跟踪到的老帧中的特征id，特征在新帧中的投影位置（已经除掉内参）>
-    void track(double t, const std::unordered_map<size_t, std::pair<size_t, Eigen::Vector2d>> &matches);
+    void update(double t, const std::unordered_map<size_t, std::pair<size_t, Eigen::Vector2d>> &matches);
 
     // 获得当前传感器在世界坐标系中的朝向
     Eigen::Quaterniond orientation() const { return JPL_toHamilton(m_q).conjugate(); }
