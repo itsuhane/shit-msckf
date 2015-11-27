@@ -32,7 +32,7 @@ inline void Givens(double a, double b, double &c, double &s) {
 
 MSCKF::MSCKF() {
     // 各种参数的初始化
-    m_state_limit = 10;
+    m_state_limit = 30;
     Matrix3d R_imu_to_cam;
     R_imu_to_cam << -Vector3d::UnitY(), -Vector3d::UnitX(), -Vector3d::UnitZ();
     m_q_imu_to_cam = HamiltonToJPL(Quaterniond(R_imu_to_cam));
