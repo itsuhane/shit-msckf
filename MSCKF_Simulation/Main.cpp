@@ -55,14 +55,14 @@ void saveFrame(const std::string &filepath, const vector<Vector3d> &features, co
 int main(int argc, char* argv[]) {
     const double T = 25.0;
     const double w = 2.0 * M_PI / T;
-    double ng = 0.001;
-    double nwg = 0.001;
-    double na = 0.1;
-    double nwa = 0.1;
+    double ng = 0.002;
+    double nwg = 0.0005;
+    double na = 0.05;
+    double nwa = 0.005;
     double nim = 0.005;
 
-    nim = boost::lexical_cast<double>(argv[1]);
-    cout << "nim = " << nim << endl;
+    //nim = boost::lexical_cast<double>(argv[1]);
+    //cout << "nim = " << nim << endl;
 
     vector<Vector3d> features = makeFeatures();
 
@@ -83,8 +83,8 @@ int main(int argc, char* argv[]) {
     ofstream log("E:/SensorFusion/Synthesis/log-" + boost::lexical_cast<string>(nim) + ".csv", ofstream::out | ofstream::trunc);
 
     for (double t = 0.0; t <= 50.0; t += 0.01) {
-        Vector3d noisy_gyro = gyro +noise.vector3()*ng;
-        Vector3d noisy_acce = acce +noise.vector3()*na;
+        Vector3d noisy_gyro = gyro + noise.vector3()*ng;
+        Vector3d noisy_acce = acce + noise.vector3()*na + Vector3d(0.02, 0.2, 0.001);
         ekf.propagate(t, noisy_gyro, noisy_acce);
         ekf_propagate_only.propagate(t, noisy_gyro, noisy_acce);
         ekf_true.propagate(t, gyro, acce);
