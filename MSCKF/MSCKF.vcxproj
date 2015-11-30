@@ -120,12 +120,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="MSCKF.cpp" />
-    <ClCompile Include="MVG.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="JPL.h" />
     <ClInclude Include="MSCKF.h" />
-    <ClInclude Include="MVG.h" />
     <ClInclude Include="RK.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

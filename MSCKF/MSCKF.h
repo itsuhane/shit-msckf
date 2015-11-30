@@ -10,7 +10,7 @@
 #include <functional>
 #include <Eigen/Eigen>
 #include "JPL.h"
-#include "MVG.h"
+//#include "MVG.h"
 
 namespace Eigen {
     typedef Matrix<double, 15, 15> Matrix15d; // 15x15 矩阵
@@ -81,6 +81,15 @@ private:
     Eigen::Vector3d m_w_old;
     Eigen::Vector3d m_a_old;
 
+    struct CameraState {
+        Eigen::Matrix3d R;
+        Eigen::Vector3d T;
+    };
+
     std::vector<CameraState> m_states; // 相机 state，我们使用 R 和 T 代替论文中的 q 和 p
     std::unordered_map<size_t, std::vector<Eigen::Vector2d>> m_tracks; // 特征 tracks
+
+    Eigen::Vector3d LinearLSTriangulation(const std::vector<Eigen::Vector2d> &xs) const;
+    Eigen::Vector3d LinearLSTriangulation(const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs) const;
+    Eigen::Vector3d RefineTriangulation(const Eigen::Vector3d &p0, const std::vector<std::pair<Eigen::Vector2d, size_t>> &xs) const;
 };

@@ -82,7 +82,6 @@ int main(int argc, char* argv[]) {
 
     ofstream log("E:/SensorFusion/Synthesis/log-" + boost::lexical_cast<string>(nim) + ".csv", ofstream::out | ofstream::trunc);
 
-    int counter = 0;
     for (double t = 0.0; t <= 50.0; t += 0.01) {
         Vector3d noisy_gyro = gyro +noise.vector3()*ng;
         Vector3d noisy_acce = acce +noise.vector3()*na;
@@ -90,20 +89,14 @@ int main(int argc, char* argv[]) {
         ekf_propagate_only.propagate(t, noisy_gyro, noisy_acce);
         ekf_true.propagate(t, gyro, acce);
         size_t fsize = 0;
-        if (counter % 3 == 0) {
-            auto frame = frameFeature(features, ekf_true.cameraOrientation(), ekf_true.cameraPosition(), nim);
-            ekf.update(t, frame);
-            fsize = frame.size();
-        }
-        counter++;
-
+        auto frame = frameFeature(features, ekf_true.cameraOrientation(), ekf_true.cameraPosition(), nim);
+        ekf.update(t, frame);
+        fsize = frame.size();
         addAxis(ekf_path, ekf.orientation(), ekf.position());
         addAxis(ekf_propagate_only_path, ekf_propagate_only.orientation(), ekf_propagate_only.position());
         addAxis(ekf_true_path, ekf_true.orientation(), ekf_true.position());
-
         stringstream s;
         s << t << ", " << fsize << ", " << (ekf_propagate_only.position() - ekf_true.position()).norm() << ", " << (ekf.position() - ekf_true.position()).norm() << ", " << ekf.positionCovariance().diagonal().sum();
-
         cout << s.str() << endl;
         log << s.str() << endl;
     }

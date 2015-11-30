@@ -18,9 +18,6 @@
     <ClCompile Include="MSCKF.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MVG.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MSCKF.h">
@@ -30,9 +27,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="JPL.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MVG.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

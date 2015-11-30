@@ -262,7 +262,7 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
     vector<Vector3d> point_for_update; // 所有用于 update 的三维点
     for (size_t i = 0; i < lost_tracks.size(); ++i) {
         if (lost_tracks[i].size() > 1) {
-            Vector3d p = LinearLSTriangulation(lost_tracks[i], m_states);
+            Vector3d p = LinearLSTriangulation(lost_tracks[i]);
             Vector3d q = m_states.back().R*p + m_states.back().T;
             if (q.z()>0.1 && q.z() < 100.0) {
                 point_for_update.push_back(p);
@@ -277,7 +277,7 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
 
     for (auto &t : jumping_tracks) {
         if (t.second.size() > 1) {
-            Vector3d p = LinearLSTriangulation(t.second, m_states);
+            Vector3d p = LinearLSTriangulation(t.second);
             size_t tid = t.second.back().second;
             Vector3d q = m_states[tid].R*p + m_states[tid].T;
             if (q.z()>0.1 && q.z() < 100.0) {
@@ -288,7 +288,7 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
     }
 
     for (size_t i = 0; i < track_for_update.size(); ++i) {
-        point_for_update[i] = RefineTriangulation(point_for_update[i], track_for_update[i], m_states);
+        point_for_update[i] = RefineTriangulation(point_for_update[i], track_for_update[i]);
     }
 
     //
@@ -503,4 +503,70 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
     state.R = R_world_to_cam;
     state.T = T_world_to_cam;
     m_states.emplace_back(state);
+}
+
+Vector3d MSCKF::LinearLSTriangulation(const vector<Vector2d> &xs) const {
+    MatrixX3d A;
+    VectorXd b;
+    A.resize(xs.size() * 2, 3);
+    b.resize(xs.size() * 2);
+    size_t sstart = m_states.size() - xs.size();
+    for (size_t i = 0; i < xs.size(); ++i) {
+        const Vector2d & x = xs[i];
+        const Matrix3d & R = m_states[sstart + i].R;
+        const Vector3d & T = m_states[sstart + i].T;
+        A.row(i * 2) = R.row(0) - x(0)*R.row(2);
+        A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
+        b(i * 2) = x(0)*T(2) - T(0);
+        b(i * 2 + 1) = x(1)*T(2) - T(1);
+    }
+
+    return A.colPivHouseholderQr().solve(b);
+}
+
+Vector3d MSCKF::LinearLSTriangulation(const vector<pair<Vector2d, size_t>> &xs) const {
+    MatrixX3d A;
+    VectorXd b;
+    A.resize(xs.size() * 2, 3);
+    b.resize(xs.size() * 2);
+    for (size_t i = 0; i < xs.size(); ++i) {
+        const Vector2d & x = xs[i].first;
+        const Matrix3d & R = m_states[xs[i].second].R;
+        const Vector3d & T = m_states[xs[i].second].T;
+        A.row(i * 2) = R.row(0) - x(0)*R.row(2);
+        A.row(i * 2 + 1) = R.row(1) - x(1)*R.row(2);
+        b(i * 2) = x(0)*T(2) - T(0);
+        b(i * 2 + 1) = x(1)*T(2) - T(1);
+    }
+
+    return A.colPivHouseholderQr().solve(b);
+}
+
+Vector3d MSCKF::RefineTriangulation(const Vector3d &p0, const vector<pair<Vector2d, size_t>> &xs) const {
+    Vector3d p = p0;
+    for (int iter = 0; iter < 10; ++iter) {
+        Vector3d Jf = Vector3d::Zero();
+        Matrix3d Hr = Matrix3d::Zero();
+        for (size_t i = 0; i < xs.size(); ++i) {
+            const Vector2d &x = xs[i].first;
+            size_t ii = xs[i].second;
+            const Matrix3d &R = m_states[ii].R;
+            const Vector3d &T = m_states[ii].T;
+            Vector3d pc = R*p + T;
+            Vector2d xc(pc.x() / pc.z(), pc.y() / pc.z());
+            MatrixXd Jpi(2, 3);
+            Jpi.setIdentity();
+            Jpi.col(2) = -xc;
+            Jpi /= pc.z();
+            Vector2d rc = xc - x;
+            MatrixXd Jr = Jpi*R;
+            Jf += rc.transpose()*Jr;
+            Hr += Jr.transpose()*Jr;
+        }
+        Vector3d dp = Hr.colPivHouseholderQr().solve(Jf);
+        p -= dp;
+        if (dp.norm() < 1e-10) break;
+    }
+
+    return p;
 }
