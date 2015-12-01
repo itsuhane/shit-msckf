@@ -60,6 +60,7 @@ void MSCKF::initialize(const JPL_Quaternion &q, const Vector3d &bg, const Vector
     m_ba = ba;
     m_p = p;
     m_g = g;
+    m_PII.setZero();
     m_PII.block<3, 3>(0, 0) = m_cov_ng;
     m_PII.block<3, 3>(3, 3) = m_cov_nwg;
     m_PII.block<3, 3>(6, 6) = m_cov_na;
@@ -119,7 +120,7 @@ public:
 
         // (9)
         rq = 0.5*(JPL_Omega(wt)*sq);
-        rv = cqt*at; rv.z() += filter.m_g;
+        rv = cqt*at; rv.z() -= filter.m_g;
         rp = sv;
 
         // (12)
