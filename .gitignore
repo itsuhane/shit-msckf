@@ -4,6 +4,7 @@
 
 /x64
 /MSCKF/x64
+/MSCKF_IP6/x64
 /MSCKF_Simulation/x64
 *.suo
 *.sdf
