@@ -163,11 +163,11 @@ void MSCKF::propagate(double t, const Vector3d &w, const Vector3d &a) {
         MotionSystem system(*this, t, w, a);
         tie(m_q, m_v, m_p, m_PII, Phi) = rk.integrate(system, tie(m_q, m_v, m_p, m_PII, eye), m_t_old, t);
         m_q = JPL_Normalize(m_q);
-    }
 
-    // eq. after (11)
-    for (size_t i = 0; i < m_PIC.size(); ++i) {
-        m_PIC[i] = Phi*m_PIC[i];
+        // eq. after (11)
+        for (size_t i = 0; i < m_PIC.size(); ++i) {
+            m_PIC[i] = Phi*m_PIC[i];
+        }
     }
 
     m_t_old = t;
@@ -413,6 +413,7 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
             PR(i, i) += m_sigma_im_squared;
         }
         MatrixXd K = PTHT*PR.inverse();
+
         // (32)£ºEKF×´Ì¬¸üÐÂ
         VectorXd dX = K*ro.block(0, 0, Trows, 1);
 
@@ -486,7 +487,7 @@ void MSCKF::update(double t, const unordered_map<size_t, pair<size_t, Vector2d>>
     Jc.block<3, 3>(3, 0) = JPL_Cross(imu_to_cam_shift_in_world);
     Jc.block<3, 3>(3, 12).setIdentity();
     Matrix<double, 15, 6> JcT = Jc.transpose();
-    
+
     // (15)
     m_PCC.push_back(vector<MatrixXd>());
     for (size_t i = 0; i < m_PIC.size(); ++i) {
